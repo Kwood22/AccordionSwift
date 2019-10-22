@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'AccordionSwift'
-  s.version          = '2.0.2'
+  s.version          = '2.0.3'
   s.summary          = 'An Accordion Menu using an UITableView in Swift.'
 
 # This description is used to generate tags and improve search results.
@@ -24,7 +24,7 @@ The best way of implement an accordion menu using an UITableView in Swift
   s.homepage         = 'https://github.com/Vkt0r/AccordionSwift'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
   s.author           = { 'Victor Sigler' => 'vikt0r.sigler@gmail.com' }
-  s.source           = { :git => 'https://github.com/Vkt0r/AccordionSwift.git', :tag => "v#{s.version.to_s}" }
+  s.source           = { :git => 'https://github.com/Kwood22/AccordionSwift.git', :tag => "v#{s.version.to_s}" }
   s.social_media_url = 'https://twitter.com/Vkt0r'
   s.swift_version    = '5.0'
 
