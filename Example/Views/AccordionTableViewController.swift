@@ -46,7 +46,7 @@ extension AccordionTableViewController {
                            CountryCellModel(name: "Egypt")]
         )
 
-        let groupB = Parent(item: GroupCellModel(name: "Group B"),
+        let groupB = Parent(state: .expanded, item: GroupCellModel(name: "Group B"),
                 children: [CountryCellModel(name: "Spain"),
                            CountryCellModel(name: "Portugal"),
                            CountryCellModel(name: "Iran"),
@@ -95,8 +95,11 @@ extension AccordionTableViewController {
                            CountryCellModel(name: "Poland")]
         )
 
-        let section0 = Section([groupA, groupB, groupC, groupD, groupE, groupF, groupG, groupH], headerTitle: nil)
-        let dataSource = DataSource(sections: section0)
+        let sections = [groupA, groupB, groupC, groupD, groupE, groupF, groupG, groupH].map { parents in
+            Section(items: parents)
+        }
+
+        let dataSource = DataSource(sections)
 
         let parentCellConfig = CellViewConfig<Parent<GroupCellModel, CountryCellModel>, UITableViewCell>(
                 reuseIdentifier: "GroupCell") { (cell, model, tableView, indexPath) -> UITableViewCell in
@@ -132,9 +135,7 @@ extension AccordionTableViewController {
                 didSelectChildAtIndexPath: didSelectChildCell,
                 scrollViewDidScroll: scrollViewDidScroll,
                 // Configure DataSourceProvider to have only one parent expanded at a time
-                numberOfExpandedParentCells: .single,
-                // Expand the 4th element initially
-                expandParentAtIndex: 3
+                numberOfExpandedParentCells: .single
         )
 
         tableView.dataSource = dataSourceProvider?.tableViewDataSource

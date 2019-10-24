@@ -189,24 +189,25 @@ extension DataSource: DataSourceType {
         }()
     }
 
-    public mutating func collapseAll() {
-        (0..<self.numberOfSections()).map { section in
+    public func indexOfFirstExpandedParent() -> IndexPath? {
+        for section in (0..<self.numberOfSections()) {
             if let parents = items(inSection: section) {
-                (parents.indices).map { index in
-                    if parents[index].state == .expanded {
-                        toggleParentCell(toState: .collapsed, inSection: section, atIndex: index)
+                for parentIndex in parents.indices {
+                    if parents[parentIndex].state == .expanded {
+                        return IndexPath(item: parentIndex, section: section)
                     }
                 }
             }
         }
+        return nil
     }
 
     public func numberOfExpandedParents() -> Int {
         var count = 0
-        (0..<self.numberOfSections()).map { section in
+        for section in (0..<self.numberOfSections()) {
             if let parents = items(inSection: section) {
-                (parents.indices).map { index in
-                    if parents[index].state == .expanded {
+                for parentIndex in parents.indices {
+                    if parents[parentIndex].state == .expanded {
                         count += 1
                     }
                 }
@@ -217,12 +218,13 @@ extension DataSource: DataSourceType {
 
     public func numberOfParents() -> Int {
         var count = 0
-        (0..<self.numberOfSections()).map { section in
+        for section in (0..<self.numberOfSections()) {
             if let parents = items(inSection: section) {
                 count += parents.count
             }
         }
         return count
     }
+
 }
 

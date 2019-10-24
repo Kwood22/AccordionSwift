@@ -64,9 +64,6 @@ public protocol DataSourceType {
     ///   - parentIndex: The index of the parent.
     mutating func toggleParentCell(toState state: State, inSection section: Int, atIndex parentIndex: Int)
 
-    /// Collapse all the expanded parents
-    mutating func collapseAll()
-
     /// Get the total number of expanded parents cells in the data source
     ///
     /// - Returns: The number of parents cells in the expanded state
@@ -76,6 +73,11 @@ public protocol DataSourceType {
     ///
     /// - Returns: The number of parents cells
     func numberOfParents() -> Int
+
+    /// Get the indexPath of the first expanded cell in the data source
+    ///
+    /// - Returns: IndexPath of the first expanded cell
+    func indexOfFirstExpandedParent() -> IndexPath?
 }
 
 extension DataSourceType {

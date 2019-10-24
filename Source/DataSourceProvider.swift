@@ -29,7 +29,7 @@ public final class DataSourceProvider<DataSource: DataSourceType,
     public typealias HeightForChildAtIndexPathClosure = (UITableView, IndexPath, DataSource.Item.ChildItem?) -> CGFloat
     public typealias HeightForParentAtIndexPathClosure = (UITableView, IndexPath, DataSource.Item?) -> CGFloat
 
-    private typealias ParentCell = (indexPath: IndexPath, index: Int)
+    private typealias ParentCell = IndexPath
 
     // MARK: - Properties
 
@@ -84,8 +84,7 @@ public final class DataSourceProvider<DataSource: DataSourceType,
                 heightForParentCellAtIndexPath: HeightForParentAtIndexPathClosure? = nil,
                 heightForChildCellAtIndexPath: HeightForChildAtIndexPathClosure? = nil,
                 scrollViewDidScroll: ScrollViewDidScrollClosure? = nil,
-                numberOfExpandedParentCells: NumberOfExpandedParentCells = .multiple,
-                expandParentAtIndex: Int? = nil
+                numberOfExpandedParentCells: NumberOfExpandedParentCells = .multiple
     ) {
         self.expandedParent = nil
         self.parentCellConfig = parentCellConfig
@@ -96,37 +95,15 @@ public final class DataSourceProvider<DataSource: DataSourceType,
         self.heightForChildCellAtIndexPath = heightForChildCellAtIndexPath
         self.scrollViewDidScroll = scrollViewDidScroll
         self.numberOfExpandedParentCells = numberOfExpandedParentCells
+        self.dataSource = dataSource
 
-        var mutableDataSource = dataSource
-        let numberOfParentCells = mutableDataSource.numberOfParents()
+        let numberOfParentCells = dataSource.numberOfParents()
+        assert(numberOfParentCells > 0, file: "DataSource has no parent cells")
 
-        if numberOfParentCells == 0 {
-            os_log("The data source does not contain any parents", type: .error)
-            self.dataSource = dataSource
-            return
+        if numberOfExpandedParentCells == .single {
+            assert(dataSource.numberOfExpandedParents() <= 1, file: "More than one expanded parent cell in dataSource")
+            expandedParent = dataSource.indexOfFirstExpandedParent()
         }
-
-        let hasMultipleParentsExpandedInDataSource = numberOfExpandedParentCells == .single && mutableDataSource.numberOfExpandedParents() > 0
-        if hasMultipleParentsExpandedInDataSource {
-            os_log("There are expanded parent cells in the data source. Defaulting to collapsing all expanded cells", type: .error)
-            mutableDataSource.collapseAll()
-        }
-
-        if let index = expandParentAtIndex {
-            // If specified expand the parent at index
-            var indexToExpand = index
-            let indexIsOutOfBounds = index < 0 || index > numberOfParentCells
-
-            if indexIsOutOfBounds {
-                os_log("The expandParentAtIndex supplied is out of bounds. Defaulting to expanding the first parent", type: .error)
-                indexToExpand = 0
-            }
-
-            expandedParent = ParentCell(indexPath: IndexPath(item: indexToExpand, section: 0), index: indexToExpand)
-            mutableDataSource.toggleParentCell(toState: .expanded, inSection: 0, atIndex: indexToExpand)
-        }
-
-        self.dataSource = mutableDataSource
     }
 
 // MARK: - Private Methods
@@ -149,12 +126,10 @@ public final class DataSourceProvider<DataSource: DataSourceType,
             return
         }
 
-        let selectedParentCell: ParentCell = ParentCell(
-                indexPath: indexPath,
-                index: parentIndex)
+        let selectedParentCell: ParentCell = indexPath
 
         tableView.beginUpdates()
-        toggle(selectedParentCell, withState: item.state, tableView)
+        toggle(selectedParentCell, withState: item.state, dataSourceIndex: parentIndex, tableView)
         tableView.endUpdates()
 
         // If the cells were expanded then we verify if they are inside the CGRect
@@ -170,22 +145,27 @@ public final class DataSourceProvider<DataSource: DataSourceType,
 // - Parameters:
 //   - currentState: The current state of the selected parent
 //   - selectedParentCell: The actual cell selected
-    private func toggle(_ selectedParentCell: ParentCell, withState currentState: State, _ tableView: UITableView) {
+    private func toggle(_ selectedParentCell: ParentCell, withState currentState: State, dataSourceIndex: Int, _ tableView: UITableView) {
         switch (currentState, numberOfExpandedParentCells) {
         case (.expanded, _):
             // Collapse the parent and it's children
-            collapse(parent: selectedParentCell, tableView)
+            collapse(parent: selectedParentCell, dataSourceIndex: dataSourceIndex, tableView)
             expandedParent = nil
         case (.collapsed, .single):
             // Expand the parent and it's children and collapse the expanded parent
+            var mutableSelectedParent = selectedParentCell
+
             if let expandedParent = expandedParent {
-                collapse(parent: expandedParent, tableView)
+                collapse(parent: expandedParent, dataSourceIndex: expandedParent.item, tableView)
+                // Correct the selectedCell's index after collapsing expanded cell
+                mutableSelectedParent = correctParentCellIndexAfterCollapse(collapsedCell: expandedParent, toBeExpandedParent: selectedParentCell)
             }
-            expand(parent: selectedParentCell, tableView)
-            expandedParent = selectedParentCell
+
+            expand(parent: mutableSelectedParent, dataSourceIndex: dataSourceIndex, tableView)
+            expandedParent = mutableSelectedParent
         case (.collapsed, .multiple):
             // Expand the parent and it's children
-            expand(parent: selectedParentCell, tableView)
+            expand(parent: selectedParentCell, dataSourceIndex: dataSourceIndex, tableView)
         }
     }
 
@@ -193,8 +173,10 @@ public final class DataSourceProvider<DataSource: DataSourceType,
 //
 // - Parameters:
 //   - parent: The actual parent cell to be expanded
-    private func expand(parent: ParentCell, _ tableView: UITableView) {
-        let numberOfChildren = dataSource.item(atRow: parent.index, inSection: parent.indexPath.section)?.children.count ?? 0
+//   - dataSourceIndex: The index of the parent in the dataSource
+//   - tableView: The tableView to insert the children cells into
+    private func expand(parent: ParentCell, dataSourceIndex: Int, _ tableView: UITableView) {
+        let numberOfChildren = getNumberOfChildren(parent: parent, dataSourceIndex: dataSourceIndex)
 
         guard numberOfChildren > 0 else {
             return
@@ -202,15 +184,47 @@ public final class DataSourceProvider<DataSource: DataSourceType,
 
         let indexPaths = getIndexes(parent, numberOfChildren)
         tableView.insertRows(at: indexPaths, with: .fade)
-        dataSource.toggleParentCell(toState: .expanded, inSection: parent.indexPath.section, atIndex: parent.index)
+        dataSource.toggleParentCell(toState: .expanded, inSection: parent.section, atIndex: dataSourceIndex)
     }
+
+// Get the number of children a parent cell has
+//
+// - Parameters:
+//   - parent: The actual parent cell to be expanded
+//
+// - Returns:
+//   - The number of children the parent cell has
+    private func getNumberOfChildren(parent: ParentCell, dataSourceIndex: Int) -> Int {
+        return dataSource.item(atRow: dataSourceIndex, inSection: parent.section)?.children.count ?? 0
+    }
+
+// Correct the toBeExpanded cell's index after collapsing the expanded cell
+//
+// - Parameters:
+//   - collapsedCell: The parent cell that has been collapsed
+//   - toBeExpandedParent: The parent cell that will be expanded
+//
+// - Returns:
+//   - The updated parent cell to be expanded
+    private func correctParentCellIndexAfterCollapse(collapsedCell expandedParent: ParentCell, toBeExpandedParent: ParentCell) -> ParentCell {
+        // If toBeExpandedParent index is larger than the currentlyExpandedParent index
+        // then update the selected parent index to be correct due to the currentlyExpandedParent's children being removed
+        if toBeExpandedParent.item > expandedParent.item {
+            let numberChildrenOfExpandedParent = getNumberOfChildren(parent: expandedParent, dataSourceIndex: expandedParent.item)
+            return IndexPath(item: (toBeExpandedParent.item - numberChildrenOfExpandedParent), section: toBeExpandedParent.section)
+        }
+        return toBeExpandedParent
+    }
+
 
 // Collapse the parent cell and it's children
 //
 // - Parameters:
 //   - parent: The actual parent cell to be expanded
-    private func collapse(parent: ParentCell, _ tableView: UITableView) {
-        let numberOfChildren = dataSource.item(atRow: parent.index, inSection: parent.indexPath.section)?.children.count ?? 0
+//   - dataSourceIndex: The index of the parent in the dataSource
+//   - tableView: The tableView to remove the children cells from
+    private func collapse(parent: ParentCell, dataSourceIndex: Int, _ tableView: UITableView) {
+        let numberOfChildren = getNumberOfChildren(parent: parent, dataSourceIndex: dataSourceIndex)
 
         guard numberOfChildren > 0 else {
             return
@@ -218,7 +232,7 @@ public final class DataSourceProvider<DataSource: DataSourceType,
 
         let indexPaths = getIndexes(parent, numberOfChildren)
         tableView.deleteRows(at: indexPaths, with: .fade)
-        dataSource.toggleParentCell(toState: .collapsed, inSection: parent.indexPath.section, atIndex: parent.index)
+        dataSource.toggleParentCell(toState: .collapsed, inSection: parent.section, atIndex: dataSourceIndex)
     }
 
 ///  Get a list of index paths of the children of the parent cell
@@ -227,20 +241,9 @@ public final class DataSourceProvider<DataSource: DataSourceType,
 ///   - parent: The parent cell
 ///   - numberOfChildren: The number of children the parent has
     private func getIndexes(_ parent: ParentCell, _ numberOfChildren: Int) -> [IndexPath] {
-        let startPosition: Int = {
-            switch numberOfExpandedParentCells {
-            case .single:
-                // Make use of parent index due to fact indexPath.row does not update the row position after
-                // collapsing the previously expanded parent
-                return parent.index
-            case .multiple:
-                // Make use of indexPath if multiple parents can be expanded as indexPath.row will be up to date
-                return parent.indexPath.row
-            }
-        }()
-        return (1...numberOfChildren).map {
-            offset -> IndexPath in
-            IndexPath(row: startPosition + offset, section: parent.indexPath.section)
+        let startPosition: Int = parent.item
+        return (1...numberOfChildren).map { offset -> IndexPath in
+            IndexPath(item: startPosition + offset, section: parent.section)
         }
     }
 
