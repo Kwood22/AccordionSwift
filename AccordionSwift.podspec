@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'AccordionSwift'
-  s.version          = '2.0.4'
+  s.version          = '2.0.5'
   s.summary          = 'An Accordion Menu using an UITableView in Swift.'
 
 # This description is used to generate tags and improve search results.
