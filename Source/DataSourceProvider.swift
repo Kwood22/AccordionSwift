@@ -36,6 +36,9 @@ public final class DataSourceProvider<DataSource: DataSourceType,
     /// The data source.
     public var dataSource: DataSource
 
+    // Animation to use to expand or collapse cells
+    public var cellAnimation: UITableView.RowAnimation = .fade
+
     // The currently expanded parent
     private var expandedParent: ParentCell? = nil
 
@@ -183,7 +186,7 @@ public final class DataSourceProvider<DataSource: DataSourceType,
         }
 
         let indexPaths = getIndexes(parent, numberOfChildren)
-        tableView.insertRows(at: indexPaths, with: .fade)
+        tableView.insertRows(at: indexPaths, with: cellAnimation)
         dataSource.toggleParentCell(toState: .expanded, inSection: parent.section, atIndex: dataSourceIndex)
     }
 
@@ -231,7 +234,7 @@ public final class DataSourceProvider<DataSource: DataSourceType,
         }
 
         let indexPaths = getIndexes(parent, numberOfChildren)
-        tableView.deleteRows(at: indexPaths, with: .fade)
+        tableView.deleteRows(at: indexPaths, with: cellAnimation)
         dataSource.toggleParentCell(toState: .collapsed, inSection: parent.section, atIndex: dataSourceIndex)
     }
 
